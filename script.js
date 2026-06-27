@@ -730,12 +730,15 @@ async function analyzeApkgFile(file) {
   if (db.close) db.close();
   const analysis = convertAnkiCardsToLocalCards(file, collection, collectionData);
   if (analysis.importableCards.length === 0 && analysis.placeholderOnly) {
-    throw new Error('Die Datei enthält nur eine Anki-Fallback-Platzhalterkarte. Bitte nutze collection.anki21b.');
+    throw new Error('Die APKG-Datei enthält in collection.anki2 nur eine Fallback-Platzhalterkarte. Die echte Datenbank liegt in collection.anki21b und muss mit Zstandard entpackt werden.');
   }
   return analysis;
 }
 
 function checkAnkiImportDependencies(options = {}) {
+  console.log('JSZip geladen:', !!globalThis.JSZip);
+  console.log('SQL.js geladen:', !!globalThis.initSqlJs);
+  console.log('fzstd geladen:', !!globalThis.fzstd, typeof globalThis.fzstd?.decompress);
   if (options.requireZip && !globalThis.JSZip) throw new Error('JSZip konnte nicht geladen werden. Prüfe vendor/jszip.min.js.');
   if (!globalThis.initSqlJs && typeof SimpleSQLiteDatabase === 'undefined') throw new Error('SQL.js konnte nicht geladen werden und der integrierte SQLite-Leser ist nicht verfügbar.');
   if (options.requireZstd && !getZstdDecoder()) throw new Error('collection.anki21b ist Zstandard-komprimiert, aber kein lokaler Zstandard-Decoder wurde geladen. Bitte prüfe vendor/zstd.js.');
@@ -794,28 +797,13 @@ async function decompressZstdBytes(uint8Array) {
 }
 
 function getZstdDecoder() {
-  if (globalThis.fzstd?.decompress) return (bytes) => globalThis.fzstd.decompress(bytes);
-  if (globalThis.ZSTDDecoder) {
-    return async (bytes) => {
-      const decoder = new globalThis.ZSTDDecoder();
-      if (decoder.init) await decoder.init();
-      if (decoder.decode) return decoder.decode(bytes);
-      if (decoder.decompress) return decoder.decompress(bytes);
-      throw new Error('ZSTDDecoder stellt weder decode noch decompress bereit.');
-    };
+  if (globalThis.fzstd && typeof globalThis.fzstd.decompress === 'function') {
+    return (bytes) => globalThis.fzstd.decompress(bytes);
   }
-  if (globalThis.ZstdCodec?.run) {
-    return (bytes) => new Promise((resolve, reject) => {
-      try {
-        globalThis.ZstdCodec.run((zstd) => resolve(zstd.Simple.decompress(bytes)));
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-  if (globalThis.zstddec?.decompress) return (bytes) => globalThis.zstddec.decompress(bytes);
+
   return null;
 }
+
 
 async function loadSqlDatabase(bytes) {
   if (globalThis.initSqlJs) {
@@ -1008,7 +996,7 @@ function isDuplicateImportedCard(localCard, pendingCards = []) {
   });
 }
 
-function isPlaceholderCard(card) { const text = normalizeTextForDuplicateCheck(`${card.question} ${card.answer}`); return text.includes('bitte installieren sie die aktuelle anki-version') || text.includes('please update to the latest anki version'); }
+function isPlaceholderCard(card) { const text = normalizeTextForDuplicateCheck(`${card.question} ${card.answer}`); return text.includes('bitte installieren sie die aktuelle anki-version') || text.includes('please update to the latest anki version') || text.includes('this deck requires a newer version of anki'); }
 function normalizeImportedDeckName(ankiDeckName, fallbackDeckName) { const name = String(ankiDeckName || '').trim(); if (!name || name.toLowerCase() === 'default') return fallbackDeckName; return name.split('::').filter(Boolean).pop() || fallbackDeckName; }
 function cleanDeckNameFromFile(fileName) { return String(fileName || 'Anki Import').replace(/\.apkg$/i, '').trim() || 'Anki Import'; }
 
