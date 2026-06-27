@@ -24,6 +24,7 @@ let selectedManagementDeckId = '';
 let selectedLearningDeckId = '';
 let currentLearningCardId = null;
 let isAnswerVisible = false;
+let analyzedApkgImport = null;
 
 const elements = {
   mainNavigation: document.querySelector('#mainNavigation'),
@@ -54,6 +55,11 @@ const elements = {
   exportJsonButton: document.querySelector('#exportJsonButton'),
   importJsonForm: document.querySelector('#importJsonForm'),
   importJsonFile: document.querySelector('#importJsonFile'),
+  apkgImportForm: document.querySelector('#apkgImportForm'),
+  apkgFileInput: document.querySelector('#apkgFileInput'),
+  importApkgButton: document.querySelector('#importApkgButton'),
+  apkgStatus: document.querySelector('#apkgStatus'),
+  apkgPreview: document.querySelector('#apkgPreview'),
 };
 
 initApp();
@@ -86,6 +92,12 @@ function bindEvents() {
     event.preventDefault();
     importJson(elements.importJsonFile.files[0]);
   });
+  elements.apkgImportForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    handleApkgFileSelected(elements.apkgFileInput.files[0]);
+  });
+  elements.apkgFileInput.addEventListener('change', () => resetApkgImportUi());
+  elements.importApkgButton.addEventListener('click', importAnalyzedApkg);
 }
 
 function loadData() {
@@ -168,6 +180,10 @@ function normalizeData(data) {
       incorrect_count: Math.max(0, Number(card.incorrect_count || 0)),
       last_reviewed_at: card.last_reviewed_at || null,
       review_history: Array.isArray(card.review_history) ? card.review_history.map(normalizeReviewEntry) : [],
+      source_type: card.source_type || null,
+      source_note_id: card.source_note_id || null,
+      source_card_id: card.source_card_id || null,
+      imported_at: card.imported_at || null,
     })),
   };
 }
@@ -240,6 +256,7 @@ function showStatsView(switchView = true) {
 
 function showImportExportView(switchView = true) {
   if (switchView) showView('import-export');
+  if (!analyzedApkgImport) resetApkgImportUi();
 }
 
 function renderDeckOverview() {
@@ -648,6 +665,459 @@ function replaceLocalData(data) {
   currentLearningCardId = null;
   isAnswerVisible = false;
   refreshCurrentView();
+}
+
+function resetApkgImportUi() {
+  analyzedApkgImport = null;
+  elements.importApkgButton.disabled = true;
+  elements.apkgStatus.textContent = 'Keine .apkg Datei analysiert.';
+  elements.apkgPreview.innerHTML = '';
+}
+
+async function handleApkgFileSelected(file) {
+  try {
+    analyzedApkgImport = null;
+    elements.importApkgButton.disabled = true;
+    elements.apkgStatus.textContent = 'Analysiere Anki-Datei ...';
+    elements.apkgPreview.innerHTML = '';
+    const analysis = await analyzeApkgFile(file);
+    analyzedApkgImport = analysis;
+    renderApkgImportPreview(analysis);
+    elements.importApkgButton.disabled = analysis.importableCards.length === 0;
+    elements.apkgStatus.textContent = analysis.importableCards.length > 0
+      ? 'Analyse abgeschlossen. Prüfe die Vorschau und importiere danach die Karten.'
+      : 'Analyse abgeschlossen. Es wurden keine importierbaren Karten gefunden.';
+  } catch (error) {
+    analyzedApkgImport = null;
+    elements.importApkgButton.disabled = true;
+    elements.apkgStatus.textContent = `Analyse fehlgeschlagen: ${error.message}`;
+    elements.apkgPreview.innerHTML = '';
+  }
+}
+
+async function analyzeApkgFile(file) {
+  if (!file) throw new Error('Bitte wähle eine .apkg Datei aus.');
+  if (!file.name.toLowerCase().endsWith('.apkg')) throw new Error('Die ausgewählte Datei ist keine .apkg Datei.');
+
+  const zip = await readApkgZip(file);
+  const collection = await selectBestAnkiCollection(zip);
+  const databaseBytes = await decompressAnki21bIfNeeded(collection);
+  const db = await loadSqlDatabase(databaseBytes);
+  const collectionData = readAnkiCollection(db);
+  db.close();
+
+  return buildApkgAnalysis(file, collection, collectionData);
+}
+
+async function readApkgZip(file) {
+  if (!globalThis.JSZip) throw new Error('JSZip fehlt. Lege vendor/jszip.min.js lokal ab und lade die Seite neu.');
+  try {
+    return await globalThis.JSZip.loadAsync(file);
+  } catch (error) {
+    throw new Error(`Die Datei ist kein gültiges ZIP/.apkg Archiv. ${error.message}`);
+  }
+}
+
+async function selectBestAnkiCollection(zip) {
+  const preferredNames = ['collection.anki21b', 'collection.anki21', 'collection.anki2'];
+  const availableNames = preferredNames.filter((name) => zip.file(name));
+  if (availableNames.length === 0) throw new Error('Das ZIP enthält keine nutzbare Anki-Datenbank.');
+
+  const name = availableNames[0];
+  const fileData = await zip.file(name).async('uint8array');
+  return {
+    name,
+    type: name,
+    fileData,
+    hasAnki21b: Boolean(zip.file('collection.anki21b')),
+    hasFallbackAnki2: Boolean(zip.file('collection.anki2')),
+  };
+}
+
+async function decompressAnki21bIfNeeded(collection) {
+  if (looksLikeSqlite(collection.fileData)) return collection.fileData;
+  if (collection.name !== 'collection.anki21b') {
+    throw new Error(`${collection.name} ist keine lesbare SQLite-Datenbank.`);
+  }
+
+  const decoder = getZstdDecoder();
+  if (!decoder) {
+    throw new Error('collection.anki21b ist vorhanden, aber offenbar Zstandard-komprimiert. Ein lokaler Zstandard-Decoder fehlt. Lege vendor/zstddec.js ab. Die Fallback-Datei collection.anki2 wird absichtlich nicht importiert, damit keine Platzhalterkarten übernommen werden.');
+  }
+
+  try {
+    const decompressed = await decoder(collection.fileData);
+    const bytes = decompressed instanceof Uint8Array ? decompressed : new Uint8Array(decompressed);
+    if (!looksLikeSqlite(bytes)) throw new Error('Entpacktes Ergebnis ist keine SQLite-Datenbank.');
+    return bytes;
+  } catch (error) {
+    throw new Error(`collection.anki21b konnte nicht mit Zstandard entpackt werden: ${error.message}`);
+  }
+}
+
+function looksLikeSqlite(bytes) {
+  const header = 'SQLite format 3';
+  if (!bytes || bytes.length < header.length) return false;
+  return header.split('').every((char, index) => bytes[index] === char.charCodeAt(0));
+}
+
+function getZstdDecoder() {
+  if (globalThis.ZstdCodec?.run) {
+    return (bytes) => new Promise((resolve) => {
+      globalThis.ZstdCodec.run((zstd) => resolve(zstd.Simple.decompress(bytes)));
+    });
+  }
+  if (globalThis.ZSTDDecoder) {
+    return async (bytes) => {
+      const decoder = new globalThis.ZSTDDecoder();
+      if (decoder.init) await decoder.init();
+      return decoder.decode(bytes);
+    };
+  }
+  if (globalThis.zstddec?.decompress) return (bytes) => globalThis.zstddec.decompress(bytes);
+  return null;
+}
+
+async function loadSqlDatabase(bytes) {
+  if (!globalThis.initSqlJs) throw new Error('sql.js fehlt. Lege vendor/sql-wasm.js und vendor/sql-wasm.wasm lokal ab und lade die Seite neu.');
+  try {
+    const SQL = await globalThis.initSqlJs({ locateFile: (fileName) => `vendor/${fileName}` });
+    return new SQL.Database(bytes);
+  } catch (error) {
+    throw new Error(`SQLite-Datenbank konnte nicht gelesen werden: ${error.message}`);
+  }
+}
+
+function readAnkiCollection(db) {
+  ensureAnkiTablesExist(db);
+  const colRows = selectRows(db, 'select models, decks from col limit 1');
+  if (colRows.length === 0) throw new Error('Tabelle col enthält keine Daten.');
+  const models = parseAnkiModels(colRows[0].models);
+  const decks = parseAnkiDecks(colRows[0].decks);
+  const notes = parseAnkiNotes(db);
+  const cards = parseAnkiCards(db);
+  return { models, decks, notes, cards };
+}
+
+function ensureAnkiTablesExist(db) {
+  const rows = selectRows(db, "select name from sqlite_master where type='table' and name in ('col','notes','cards')");
+  const names = rows.map((row) => row.name);
+  for (const required of ['col', 'notes', 'cards']) {
+    if (!names.includes(required)) throw new Error(`SQLite-Tabelle ${required} fehlt.`);
+  }
+}
+
+function selectRows(db, sql) {
+  const result = db.exec(sql);
+  if (!result.length) return [];
+  const { columns, values } = result[0];
+  return values.map((valueRow) => Object.fromEntries(columns.map((column, index) => [column, valueRow[index]])));
+}
+
+function parseAnkiModels(modelsJson) {
+  try { return JSON.parse(modelsJson); } catch { throw new Error('models JSON aus Tabelle col ist ungültig.'); }
+}
+
+function parseAnkiDecks(decksJson) {
+  try { return JSON.parse(decksJson); } catch { throw new Error('decks JSON aus Tabelle col ist ungültig.'); }
+}
+
+function parseAnkiNotes(db) {
+  return selectRows(db, 'select id, mid, flds, tags from notes');
+}
+
+function parseAnkiCards(db) {
+  return selectRows(db, 'select id, nid, did, ord from cards order by due asc, id asc');
+}
+
+function buildApkgAnalysis(file, collection, collectionData) {
+  const warnings = [];
+  const skipped = [];
+  const importableCards = [];
+  const notesById = new Map(collectionData.notes.map((note) => [String(note.id), note]));
+  const fallbackDeckName = cleanDeckNameFromFile(file.name);
+
+  for (const ankiCard of collectionData.cards) {
+    const note = notesById.get(String(ankiCard.nid));
+    const model = note ? collectionData.models[String(note.mid)] : null;
+    const deck = collectionData.decks[String(ankiCard.did)] || { name: fallbackDeckName };
+    if (!note || !model) {
+      skipped.push({ reason: 'unsupported', message: `Karte ${ankiCard.id}: Notiz oder Model fehlt.` });
+      continue;
+    }
+    const converted = convertAnkiCardToLocalCard(ankiCard, note, model, deck, fallbackDeckName, warnings);
+    if (!converted.card) {
+      skipped.push(converted.skipped);
+      continue;
+    }
+    if (isPlaceholderCard(converted.card)) {
+      skipped.push({ reason: 'placeholder', message: `Karte ${ankiCard.id}: Platzhalter-/Update-Hinweis wurde nicht importiert.` });
+      continue;
+    }
+    if (isDuplicateImportedCard(converted.card, importableCards)) {
+      skipped.push({ reason: 'duplicate', message: `Karte ${ankiCard.id}: Duplikat wurde übersprungen.` });
+      continue;
+    }
+    importableCards.push(converted.card);
+  }
+
+  const deckNames = [...new Set(importableCards.map((card) => card.anki_deck_name))];
+  return {
+    fileName: file.name,
+    databaseType: collection.type,
+    ankiDecks: Object.values(collectionData.decks).map((deck) => deck.name).filter(Boolean),
+    deckNames,
+    noteCount: collectionData.notes.length,
+    cardCount: collectionData.cards.length,
+    importableCards,
+    skipped,
+    warnings: [...new Set(warnings)],
+  };
+}
+
+function mapAnkiNoteFields(note, model) {
+  const values = String(note.flds || '').split('\x1f');
+  const fieldMap = {};
+  const fields = Array.isArray(model.flds) ? model.flds : [];
+  fields.forEach((field, index) => { fieldMap[field.name] = values[index] || ''; });
+  return fieldMap;
+}
+
+function convertAnkiCardToLocalCard(ankiCard, ankiNote, model, deck, fallbackDeckName, warnings) {
+  const modelName = String(model.name || '').toLowerCase();
+  const fields = mapAnkiNoteFields(ankiNote, model);
+  let converted;
+  if (modelName.includes('image occlusion')) {
+    return { skipped: { reason: 'unsupported', message: 'Image-Occlusion-Karten werden im MVP noch nicht unterstützt.' } };
+  }
+  if (Number(model.type) === 1 || modelName.includes('cloze')) converted = convertClozeCard(ankiCard, fields, warnings);
+  else if (modelName.includes('optional') && modelName.includes('reverse')) converted = convertOptionalReversedCard(ankiCard, fields);
+  else if (modelName.includes('reverse')) converted = convertBasicReversedCard(ankiCard, fields);
+  else if (modelName.includes('type')) converted = convertTypeInAnswerCard(fields);
+  else converted = convertBasicCard(fields);
+
+  if (!converted.card) return converted;
+  const hasMedia = /\[(sound|anki:play)[^\]]*\]|<img\b|<audio\b|<video\b/i.test(`${converted.rawQuestion || ''} ${converted.rawAnswer || ''}`);
+  if (hasMedia) warnings.push('Medienreferenzen wurden erkannt. Medienimport ist im MVP nicht aktiv; importiert wird nur verständlicher Text.');
+  const deckName = normalizeImportedDeckName(deck.name, fallbackDeckName);
+  return { card: createImportedCard(converted.card.question, converted.card.answer, deckName, ankiNote.id, ankiCard.id) };
+}
+
+function convertBasicCard(fields) {
+  return cardFromFields(fields.Front, fields.Back);
+}
+
+function convertBasicReversedCard(ankiCard, fields) {
+  return Number(ankiCard.ord) === 1 ? cardFromFields(fields.Back, fields.Front) : cardFromFields(fields.Front, fields.Back);
+}
+
+function convertOptionalReversedCard(ankiCard, fields) {
+  if (Number(ankiCard.ord) === 1 && !String(fields['Add Reverse'] || '').trim()) {
+    return { skipped: { reason: 'unsupported', message: 'Optionale Rückseitenkarte ohne Add-Reverse-Feld wurde übersprungen.' } };
+  }
+  return convertBasicReversedCard(ankiCard, fields);
+}
+
+function convertTypeInAnswerCard(fields) {
+  return cardFromFields(fields.Front, fields.Back);
+}
+
+function convertClozeCard(ankiCard, fields, warnings) {
+  const text = fields.Text || fields.Front || Object.values(fields)[0] || '';
+  const extra = fields.Extra ? `\n\n${fields.Extra}` : '';
+  const clozeNumber = Number(ankiCard.ord) + 1;
+  const pattern = new RegExp(`{{c${clozeNumber}::(.*?)(?:::.*?)?}}`, 'gi');
+  if (!pattern.test(text)) {
+    warnings.push('Cloze-Karte ohne passende einfache Cloze-Lücke wurde übersprungen.');
+    return { skipped: { reason: 'unsupported', message: `Cloze-Karte ${ankiCard.id}: keine passende c${clozeNumber}-Lücke gefunden.` } };
+  }
+  pattern.lastIndex = 0;
+  const questionHtml = text.replace(pattern, '[...]');
+  const answerHtml = text.replace(pattern, '$1') + extra;
+  if ((text.match(/{{c\d+::/g) || []).length > 1) warnings.push('Mehrere Cloze-Lücken erkannt; sie wurden vereinfacht importiert.');
+  return cardFromFields(questionHtml, answerHtml);
+}
+
+function cardFromFields(rawQuestion, rawAnswer) {
+  const question = sanitizeAnkiHtml(rawQuestion);
+  const answer = sanitizeAnkiHtml(rawAnswer);
+  if (!question) return { skipped: { reason: 'empty', message: 'Karte mit leerer Frage wurde übersprungen.' } };
+  if (!answer) return { skipped: { reason: 'empty', message: 'Karte mit leerer Antwort wurde übersprungen.' } };
+  return { card: { question, answer }, rawQuestion, rawAnswer };
+}
+
+function createImportedCard(question, answer, ankiDeckName, noteId, cardId) {
+  const now = new Date().toISOString();
+  return {
+    card_id: createId('card'),
+    deck_id: '',
+    question,
+    answer,
+    created_at: now,
+    updated_at: now,
+    due_at: now,
+    interval_minutes: 0,
+    correct_count: 0,
+    incorrect_count: 0,
+    last_reviewed_at: null,
+    review_history: [],
+    source_type: 'anki',
+    source_note_id: String(noteId),
+    source_card_id: String(cardId),
+    imported_at: now,
+    anki_deck_name: ankiDeckName,
+  };
+}
+
+function sanitizeAnkiHtml(input) {
+  const stripped = stripDangerousHtml(String(input || ''));
+  const template = document.createElement('template');
+  template.innerHTML = stripped.replace(/<br\s*\/?\s*>/gi, '\n').replace(/<\/p\s*>/gi, '\n').replace(/<\/div\s*>/gi, '\n');
+  template.content.querySelectorAll('img,audio,video,source').forEach((node) => node.remove());
+  return template.content.textContent.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function stripDangerousHtml(input) {
+  return String(input || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
+function normalizeTextForDuplicateCheck(input) {
+  return String(input || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isDuplicateImportedCard(localCard, pendingCards = []) {
+  if (appState.cards.some((card) => card.source_type === 'anki' && String(card.source_card_id) === String(localCard.source_card_id))) return true;
+  if (pendingCards.some((card) => String(card.source_card_id) === String(localCard.source_card_id))) return true;
+  const question = normalizeTextForDuplicateCheck(localCard.question);
+  const answer = normalizeTextForDuplicateCheck(localCard.answer);
+  return [...appState.cards, ...pendingCards].some((card) => {
+    const existingDeckName = card.anki_deck_name || getDeck(card.deck_id)?.deck_name || '';
+    const incomingDeckName = localCard.anki_deck_name || getDeck(localCard.deck_id)?.deck_name || '';
+    return normalizeTextForDuplicateCheck(card.question) === question
+      && normalizeTextForDuplicateCheck(card.answer) === answer
+      && normalizeTextForDuplicateCheck(existingDeckName) === normalizeTextForDuplicateCheck(incomingDeckName);
+  });
+}
+
+function isPlaceholderCard(card) {
+  const text = normalizeTextForDuplicateCheck(`${card.question} ${card.answer}`);
+  return text.includes('bitte installieren sie die aktuelle anki-version') || text.includes('please update to the latest anki version');
+}
+
+function normalizeImportedDeckName(ankiDeckName, fallbackDeckName) {
+  const name = String(ankiDeckName || '').trim();
+  if (!name || name.toLowerCase() === 'default') return fallbackDeckName;
+  return name.split('::').filter(Boolean).pop() || fallbackDeckName;
+}
+
+function cleanDeckNameFromFile(fileName) {
+  return String(fileName || 'Anki Import').replace(/\.apkg$/i, '').trim() || 'Anki Import';
+}
+
+function createDecksForAnkiImport(importableCards) {
+  const map = new Map();
+  for (const card of importableCards) {
+    if (map.has(card.anki_deck_name)) continue;
+    const now = new Date().toISOString();
+    const deck = {
+      deck_id: createId('deck'),
+      deck_name: createUniqueDeckName(card.anki_deck_name),
+      created_at: now,
+      updated_at: now,
+    };
+    map.set(card.anki_deck_name, deck);
+  }
+  return map;
+}
+
+function createUniqueDeckName(baseName) {
+  const existing = new Set(appState.decks.map((deck) => deck.deck_name.toLowerCase()));
+  if (!existing.has(baseName.toLowerCase())) return baseName;
+  let counter = 2;
+  while (existing.has(`${baseName} (Import ${counter})`.toLowerCase())) counter += 1;
+  return `${baseName} (Import ${counter})`;
+}
+
+function saveImportedCards(analysis) {
+  const deckMap = createDecksForAnkiImport(analysis.importableCards);
+  const decksToAdd = [...deckMap.values()];
+  const cardsToAdd = [];
+  const skippedDuringSave = [];
+  for (const card of analysis.importableCards) {
+    const deck = deckMap.get(card.anki_deck_name);
+    const localCard = { ...card, deck_id: deck.deck_id };
+    delete localCard.anki_deck_name;
+    if (isDuplicateImportedCard(localCard, cardsToAdd)) {
+      skippedDuringSave.push({ reason: 'duplicate', message: `Karte ${localCard.source_card_id}: Duplikat wurde beim Speichern übersprungen.` });
+      continue;
+    }
+    cardsToAdd.push(localCard);
+  }
+
+  appState.decks.push(...decksToAdd);
+  appState.cards.push(...cardsToAdd);
+  saveData();
+  selectedManagementDeckId = decksToAdd[0]?.deck_id || selectedManagementDeckId;
+  selectedLearningDeckId = decksToAdd[0]?.deck_id || selectedLearningDeckId;
+  refreshCurrentView();
+  return { importedCount: cardsToAdd.length, deckCount: decksToAdd.length, skippedDuringSave };
+}
+
+function importAnalyzedApkg() {
+  if (!analyzedApkgImport) {
+    showMessage('Bitte analysiere zuerst eine .apkg Datei.', 'error');
+    return;
+  }
+  if (analyzedApkgImport.importableCards.length === 0) {
+    showMessage('Es gibt keine importierbaren Karten.', 'error');
+    return;
+  }
+  if (!confirm(`${analyzedApkgImport.importableCards.length} Karte(n) zu bestehenden lokalen Daten hinzufügen?`)) {
+    renderApkgImportSummary({ importedCount: 0, deckCount: 0, skippedDuringSave: [{ reason: 'aborted', message: 'Import wurde vom Nutzer abgebrochen.' }] });
+    return;
+  }
+  try {
+    const summary = saveImportedCards(analyzedApkgImport);
+    renderApkgImportSummary(summary);
+    showMessage(`${summary.importedCount} Anki-Karte(n) wurden importiert.`, 'success');
+    analyzedApkgImport = null;
+    elements.importApkgButton.disabled = true;
+  } catch (error) {
+    showMessage(`Anki-Import konnte nicht gespeichert werden: ${error.message}`, 'error');
+  }
+}
+
+function renderApkgImportPreview(analysis) {
+  const warnings = analysis.warnings.concat(analysis.skipped.map((item) => item.message));
+  elements.apkgPreview.innerHTML = `<div class="summary-grid">
+    <span><strong>${escapeHtml(analysis.databaseType)}</strong>Datenbanktyp</span>
+    <span><strong>${analysis.ankiDecks.length}</strong>erkannte Anki-Decks</span>
+    <span><strong>${analysis.noteCount}</strong>Notizen</span>
+    <span><strong>${analysis.cardCount}</strong>Karten</span>
+    <span><strong>${analysis.importableCards.length}</strong>importierbar</span>
+    <span><strong>${analysis.skipped.length}</strong>übersprungen</span>
+  </div>
+  <h3>Erkannte Decks</h3>
+  <p>${escapeHtml((analysis.deckNames.length ? analysis.deckNames : analysis.ankiDecks).join(', ') || 'Keine')}</p>
+  <h3>Warnungen und übersprungene Karten</h3>
+  ${renderWarningList(warnings)}`;
+}
+
+function renderApkgImportSummary(summary) {
+  const warnings = summary.skippedDuringSave.map((item) => item.message);
+  elements.apkgStatus.textContent = `Import-Zusammenfassung: ${summary.importedCount} Karte(n) in ${summary.deckCount} Stapel(n) importiert.`;
+  elements.apkgPreview.innerHTML += `<h3>Import-Zusammenfassung</h3>
+    <p>${summary.importedCount} Karte(n) importiert. ${summary.skippedDuringSave.length} Karte(n) beim Speichern übersprungen.</p>
+    ${renderWarningList(warnings)}`;
+}
+
+function renderWarningList(warnings) {
+  if (!warnings.length) return '<p>Keine Warnungen.</p>';
+  return `<ul class="warning-list">${warnings.slice(0, 80).map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>`;
 }
 
 function getDeck(deckId) {

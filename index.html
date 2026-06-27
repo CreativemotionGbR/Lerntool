@@ -147,9 +147,19 @@
         </article>
       </div>
 
-      <article class="panel notice-panel">
-        <h2>.apkg Import</h2>
-        <p>.apkg Import ist vorbereitet, aber im MVP noch nicht aktiv. Anki .apkg-Dateien sind ZIP-Dateien mit einer SQLite-Datenbank und benötigen JSZip und sql.js.</p>
+      <article class="panel notice-panel apkg-panel">
+        <h2>Anki .apkg Import</h2>
+        <p>Analysiere zuerst die Datei. Erst nach der Vorschau werden unterstützte Karten importiert.</p>
+        <form id="apkgImportForm" class="form-stack" novalidate>
+          <label for="apkgFileInput">Datei auswählen</label>
+          <input id="apkgFileInput" type="file" accept=".apkg,application/zip,application/octet-stream">
+          <div class="button-row">
+            <button id="analyzeApkgButton" type="submit">Anki-Datei analysieren</button>
+            <button id="importApkgButton" type="button" class="secondary" disabled>Karten importieren</button>
+          </div>
+        </form>
+        <div id="apkgStatus" class="status-box">Keine .apkg Datei analysiert.</div>
+        <div id="apkgPreview" class="import-summary"></div>
       </article>
 
       <article class="panel notice-panel disabled-feature">
@@ -159,6 +169,9 @@
     </section>
   </main>
 
+  <script src="vendor/jszip.min.js"></script>
+  <script src="vendor/zstddec.js"></script>
+  <script src="vendor/sql-wasm.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

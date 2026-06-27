@@ -73,3 +73,15 @@ Failure tests:
 - Build only from the specification.
 - Do not invent missing requirements.
 - Mark unclear requirements as open decisions.
+
+## Anki import rules
+
+- Do not overwrite local data during .apkg import.
+- Analyze before importing.
+- Show a preview before saving imported cards.
+- Prefer collection.anki21b over collection.anki2 if both exist.
+- Do not import placeholder cards from fallback databases.
+- Skip unsupported card types instead of creating broken cards.
+- Imported cards start with interval_minutes = 0 and due_at = now.
+- Existing scheduling logic must not be changed.
+- No external APIs.

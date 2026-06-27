@@ -31,6 +31,7 @@ style.css
 script.js
 README.md
 AGENTS.md
+vendor/README.md
 ```
 
 - `index.html` enthält die Ansichten und Navigation.
@@ -38,6 +39,7 @@ AGENTS.md
 - `script.js` enthält Datenhaltung, Rendering, Validierung, Lernlogik und Import/Export.
 - `README.md` erklärt Start, Funktionen und Tests.
 - `AGENTS.md` enthält Projektregeln für weitere Codex-Arbeit.
+- `vendor/README.md` beschreibt die lokal abzulegenden Bibliotheken für den `.apkg` Import.
 
 ## 4. Wie funktioniert die Lernlogik?
 
@@ -163,11 +165,56 @@ Nur bei Bestätigung werden lokale Daten ersetzt.
 - keine externen APIs
 - kein Tracking
 - keine Analytics
-- kein vollständig implementierter `.apkg` Import
+- kein vollständiger `.apkg` Import für Image Occlusion, komplexe Medien und komplexe Custom Templates
 - kein intelligenter Modus
 - keine KI-Funktion
 
-Die Oberfläche zeigt nur vorbereitete Hinweise für `.apkg` Import und intelligenten Modus.
+Die Oberfläche enthält einen funktionierenden Textkarten-Import für `.apkg` Dateien und weiterhin nur einen vorbereiteten Hinweis für den intelligenten Modus.
+
+## Anki .apkg Import
+
+Die App kann Anki `.apkg` Dateien importieren, wenn die benötigten Vendor-Dateien lokal vorhanden sind. Der Import läuft vollständig im Browser: Die Datei wird zuerst analysiert, danach erscheint eine Vorschau, und erst nach Klick auf `Karten importieren` werden neue lokale Stapel und Karten hinzugefügt. Bestehende lokale Daten werden dabei nicht gelöscht.
+
+Unterstützt im MVP:
+
+- Basic
+- Basic and reversed card
+- Basic optional reversed card
+- Basic type in answer
+- einfache Cloze-Karten
+
+Noch nicht vollständig unterstützt:
+
+- Image Occlusion
+- komplexe Medien
+- komplexe Custom Templates
+
+Technisch benötigt:
+
+- `vendor/jszip.min.js`
+- `vendor/sql-wasm.js`
+- `vendor/sql-wasm.wasm`
+- ggf. `vendor/zstddec.js` für neue Anki-Dateien mit `collection.anki21b`
+
+Die Daten bleiben lokal im Browser. Es gibt keine CDN-Abhängigkeit, keine externen APIs und keine Cloud-Synchronisierung. Wenn `collection.anki21b` vorhanden, aber ohne lokalen Zstandard-Decoder nicht lesbar ist, zeigt die App eine klare Fehlermeldung und importiert nicht blind eine mögliche `collection.anki2`-Fallback-/Platzhalterdatenbank.
+
+### Test mit `IT-Recht.apkg`
+
+1. Lege die benötigten Vendor-Dateien im Ordner `vendor/` ab.
+2. Öffne `index.html` direkt im Browser.
+3. Öffne `Import / Export`.
+4. Wähle `IT-Recht.apkg` aus.
+5. Klicke auf `Anki-Datei analysieren`.
+6. Prüfe Datenbanktyp, erkannte Decks, Notizen, Karten, importierbare Karten und Warnungen.
+7. Klicke nur bei plausibler Vorschau auf `Karten importieren`.
+8. Starte danach den importierten Stapel in der Lernansicht. Importierte Karten sind sofort fällig und nutzen die bestehende Richtig/Falsch-Logik.
+
+Bekannte Grenzen des Imports:
+
+- Medien werden im MVP nicht vollständig übernommen; Text wird bevorzugt stabil importiert.
+- Image-Occlusion-Karten werden übersprungen.
+- Sehr komplexe Custom Templates können übersprungen oder vereinfacht werden.
+- Neue `collection.anki21b` Dateien benötigen bei Zstandard-Kompression einen passenden lokalen Decoder.
 
 ## Testanleitung
 
@@ -192,3 +239,7 @@ Führe die Tests manuell im Browser aus, indem du `index.html` öffnest. Für ei
 | JSON Import gültig | valide Backup-Datei | Daten werden nach Bestätigung ersetzt |
 | JSON Import ungültig | kaputte Datei | lokale Daten bleiben erhalten |
 | Sonderzeichen | Umlaute, Anführungszeichen | bleiben nach Export/Import erhalten |
+| Neue Anki-Datei | `collection.anki21b` vorhanden | `collection.anki21b` wird bevorzugt oder klarer Fehler angezeigt |
+| Fallback-Platzhalter | `collection.anki2` enthält nur Update-Hinweis | Platzhalter wird nicht importiert |
+| Cloze einfach | `{{c1::Begriff}}` | Frage mit Lücke und Antwort mit Begriff |
+| Scheduler nach Import | importierte Karte richtig | `interval_minutes` wird 1, `due_at = jetzt + 1 Minute` |
