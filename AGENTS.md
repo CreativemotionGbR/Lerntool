@@ -88,4 +88,5 @@ Failure tests:
 - Support old and new Anki schemas.
 - German field names Vorderseite/Rückseite map to question/answer.
 - Failed imports must not change local data.
+- Do not use DecompressionStream("zstd") for Anki imports.
 - No external APIs.

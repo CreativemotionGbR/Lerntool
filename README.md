@@ -194,9 +194,27 @@ Technisch benötigt:
 - `vendor/jszip.min.js`
 - `vendor/sql-wasm.js`
 - `vendor/sql-wasm.wasm`
-- `vendor/zstddec.js` für neue Anki-Dateien mit Zstandard-komprimierter `collection.anki21b`
+- `vendor/zstd.js` für neue Anki-Dateien mit Zstandard-komprimierter `collection.anki21b`
 
 Die Daten bleiben lokal im Browser. Es gibt keine CDN-Abhängigkeit, keine externen APIs und keine Cloud-Synchronisierung. Wenn `collection.anki21b` vorhanden, aber ohne lokalen Zstandard-Decoder nicht lesbar ist, zeigt die App eine klare Fehlermeldung und importiert nicht blind eine mögliche `collection.anki2`-Fallback-/Platzhalterdatenbank.
+
+## Lokale Vendor-Dateien für Anki Import
+
+Für den APKG-Import werden lokale Bibliotheken benötigt:
+
+- JSZip für APKG als ZIP (`vendor/jszip.min.js`)
+- sql.js für SQLite (`vendor/sql-wasm.js` und `vendor/sql-wasm.wasm`) oder der integrierte read-only SQLite-Fallback
+- ein Zstandard-Decoder für `collection.anki21b` (`vendor/zstd.js`)
+
+Die App nutzt keine CDN-Dateien und sendet keine Daten an externe Dienste. `vendor/zstd.js` muss vor `script.js` geladen werden.
+
+Wenn der Fehler erscheint:
+
+```txt
+collection.anki21b ist Zstandard-komprimiert, aber kein lokaler Zstandard-Decoder wurde geladen
+```
+
+dann fehlt ein echter lokaler Zstandard-Decoder im Vendor-Ordner oder er stellt keine unterstützte globale API bereit. Unterstützt werden `fzstd.decompress(...)`, `ZSTDDecoder`, `ZstdCodec` oder `zstddec.decompress(...)`.
 
 ### Test mit `IT-Recht.apkg`
 

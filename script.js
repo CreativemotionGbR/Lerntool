@@ -738,7 +738,7 @@ async function analyzeApkgFile(file) {
 function checkAnkiImportDependencies(options = {}) {
   if (options.requireZip && !globalThis.JSZip) throw new Error('JSZip konnte nicht geladen werden. Prüfe vendor/jszip.min.js.');
   if (!globalThis.initSqlJs && typeof SimpleSQLiteDatabase === 'undefined') throw new Error('SQL.js konnte nicht geladen werden und der integrierte SQLite-Leser ist nicht verfügbar.');
-  if (options.requireZstd && !getZstdDecoder()) throw new Error('collection.anki21b ist Zstandard-komprimiert, aber kein Zstandard-Decoder ist verfügbar.');
+  if (options.requireZstd && !getZstdDecoder()) throw new Error('collection.anki21b ist Zstandard-komprimiert, aber kein lokaler Zstandard-Decoder wurde geladen. Bitte prüfe vendor/zstd.js.');
   return { ok: true };
 }
 
@@ -761,17 +761,10 @@ async function collectionFromZip(zip, name) {
 
 async function loadSqlDatabaseFromCollection(collection) {
   if (looksLikeSqlite(collection.fileData)) return collection.fileData;
-  if (collection.name === 'collection.anki21b' && looksLikeZstd(collection.fileData)) {
-    checkAnkiImportDependencies({ requireZstd: true });
-    try {
-      const decoder = getZstdDecoder();
-      const decompressed = await decoder(collection.fileData);
-      const bytes = decompressed instanceof Uint8Array ? decompressed : new Uint8Array(decompressed);
-      if (!looksLikeSqlite(bytes)) throw new Error('entpacktes Ergebnis ist keine SQLite-Datenbank.');
-      return bytes;
-    } catch (error) {
-      throw new Error(`collection.anki21b ist Zstandard-komprimiert, konnte aber nicht entpackt werden: ${error.message}`);
-    }
+  if (collection.name === 'collection.anki21b' && isZstdCompressed(collection.fileData)) {
+    const bytes = await decompressZstdBytes(collection.fileData);
+    if (!looksLikeSqlite(bytes)) throw new Error('Die entpackte collection.anki21b ist keine gültige SQLite-Datenbank.');
+    return bytes;
   }
   if (collection.name === 'collection.anki21b') throw new Error('collection.anki21b ist nicht als SQLite-Datenbank lesbar. Es wird kein collection.anki2-Fallback importiert.');
   throw new Error(`${collection.name} ist keine lesbare SQLite-Datenbank.`);
@@ -783,13 +776,43 @@ function looksLikeSqlite(bytes) {
   return header.split('').every((char, index) => bytes[index] === char.charCodeAt(0));
 }
 
-function looksLikeZstd(bytes) {
+function isZstdCompressed(bytes) {
   return bytes && bytes.length >= 4 && bytes[0] === 0x28 && bytes[1] === 0xb5 && bytes[2] === 0x2f && bytes[3] === 0xfd;
 }
 
+async function decompressZstdBytes(uint8Array) {
+  const decoder = getZstdDecoder();
+  if (!decoder) {
+    throw new Error('collection.anki21b ist Zstandard-komprimiert, aber kein lokaler Zstandard-Decoder wurde geladen. Bitte prüfe vendor/zstd.js.');
+  }
+  try {
+    const decompressed = await decoder(uint8Array);
+    return decompressed instanceof Uint8Array ? decompressed : new Uint8Array(decompressed);
+  } catch (error) {
+    throw new Error(`collection.anki21b konnte nicht mit dem lokalen Zstandard-Decoder entpackt werden. ${error.message}`);
+  }
+}
+
 function getZstdDecoder() {
-  if (globalThis.ZstdCodec?.run) return (bytes) => new Promise((resolve) => globalThis.ZstdCodec.run((zstd) => resolve(zstd.Simple.decompress(bytes))));
-  if (globalThis.ZSTDDecoder) return async (bytes) => { const decoder = new globalThis.ZSTDDecoder(); if (decoder.init) await decoder.init(); return decoder.decode(bytes); };
+  if (globalThis.fzstd?.decompress) return (bytes) => globalThis.fzstd.decompress(bytes);
+  if (globalThis.ZSTDDecoder) {
+    return async (bytes) => {
+      const decoder = new globalThis.ZSTDDecoder();
+      if (decoder.init) await decoder.init();
+      if (decoder.decode) return decoder.decode(bytes);
+      if (decoder.decompress) return decoder.decompress(bytes);
+      throw new Error('ZSTDDecoder stellt weder decode noch decompress bereit.');
+    };
+  }
+  if (globalThis.ZstdCodec?.run) {
+    return (bytes) => new Promise((resolve, reject) => {
+      try {
+        globalThis.ZstdCodec.run((zstd) => resolve(zstd.Simple.decompress(bytes)));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
   if (globalThis.zstddec?.decompress) return (bytes) => globalThis.zstddec.decompress(bytes);
   return null;
 }
