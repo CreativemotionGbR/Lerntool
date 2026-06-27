@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lokales Lerntool</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Browser-Lernanwendung</p>
+      <h1>Lokales Lerntool</h1>
+      <p>Erstelle Stapel und Lernkarten, wiederhole sie lokal und sichere deine Daten optional in GitHub.</p>
+    </div>
+    <div class="status-card">
+      <span id="storageStatus">Lokaler Speicher aktiv</span>
+      <strong id="cardCount">0 Karten</strong>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>Neue Lernkarte</h2>
+      <form id="cardForm" class="stacked-form">
+        <label>
+          Stapel
+          <input id="deckInput" type="text" placeholder="z. B. Biologie" required>
+        </label>
+        <label>
+          Vorderseite / Frage
+          <textarea id="frontInput" rows="3" required></textarea>
+        </label>
+        <label>
+          Rückseite / Antwort
+          <textarea id="backInput" rows="3" required></textarea>
+        </label>
+        <button type="submit">Karte speichern</button>
+      </form>
+    </section>
+
+    <section class="panel review-panel">
+      <div class="section-title">
+        <h2>Wiederholen</h2>
+        <select id="deckFilter" aria-label="Stapel auswählen"></select>
+      </div>
+      <article id="reviewCard" class="flashcard empty">
+        <p>Lege zuerst eine Karte an.</p>
+      </article>
+      <div class="review-actions">
+        <button id="showAnswerButton" type="button">Antwort zeigen</button>
+        <button id="knownButton" type="button">Gewusst</button>
+        <button id="unknownButton" type="button">Nicht gewusst</button>
+      </div>
+    </section>
+
+    <section class="panel wide">
+      <div class="section-title">
+        <h2>Alle Karten</h2>
+        <button id="exportButton" type="button" class="secondary">JSON exportieren</button>
+      </div>
+      <div id="cardList" class="card-list"></div>
+    </section>
+
+    <section class="panel wide sync-panel">
+      <div class="section-title">
+        <div>
+          <h2>GitHub-Synchronisierung</h2>
+          <p class="muted">Optionaler manueller Backup-Speicher über die GitHub REST API.</p>
+        </div>
+        <span class="badge">Kein Auto-Sync</span>
+      </div>
+
+      <form id="githubSettingsForm" class="sync-grid">
+        <label>
+          Repository-Besitzer
+          <input id="githubOwner" type="text" autocomplete="off" placeholder="octocat">
+        </label>
+        <label>
+          Repository-Name
+          <input id="githubRepo" type="text" autocomplete="off" placeholder="lern-backup">
+        </label>
+        <label>
+          Branch
+          <input id="githubBranch" type="text" autocomplete="off" value="main">
+        </label>
+        <label>
+          Dateipfad
+          <input id="githubPath" type="text" autocomplete="off" value="learning-tool-data/data.json">
+        </label>
+        <label class="full-width">
+          Personal Access Token
+          <input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_...">
+        </label>
+        <label class="checkbox full-width">
+          <input id="persistToken" type="checkbox">
+          Token dauerhaft lokal speichern
+        </label>
+        <p id="tokenWarning" class="warning hidden">Achtung: Der Token wird lokal im Browser gespeichert. Nutze diese Option nur auf deinem eigenen PC.</p>
+        <button type="submit">Einstellungen speichern</button>
+      </form>
+
+      <div class="sync-actions">
+        <button id="uploadGithubButton" type="button">Lokale Daten zu GitHub hochladen</button>
+        <button id="downloadGithubButton" type="button" class="secondary">Daten von GitHub herunterladen</button>
+        <button id="replaceLocalButton" type="button" class="danger">Lokale Daten mit GitHub-Daten ersetzen</button>
+      </div>
+      <pre id="syncLog" class="sync-log" aria-live="polite">Bereit.</pre>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
