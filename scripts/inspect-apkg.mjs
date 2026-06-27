@@ -65,7 +65,7 @@ function extractStoredEntry(bytes, entry) {
 async function loadVendorFzstd() {
   if (!(await exists('vendor/zstd.js'))) return null;
   const code = await readFile('vendor/zstd.js', 'utf8');
-  const sandbox = { globalThis: {}, self: {}, window: {} };
+  const sandbox = { globalThis: {}, self: {}, window: {}, atob: (value) => Buffer.from(value, 'base64').toString('binary') };
   sandbox.globalThis = sandbox;
   sandbox.self = sandbox;
   sandbox.window = sandbox;

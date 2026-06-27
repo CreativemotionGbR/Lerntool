@@ -214,7 +214,7 @@ Wenn der Fehler erscheint:
 collection.anki21b ist Zstandard-komprimiert, aber kein lokaler Zstandard-Decoder wurde geladen
 ```
 
-dann fehlt ein echter lokaler Zstandard-Decoder im Vendor-Ordner oder er stellt keine unterstützte globale API bereit. Unterstützt werden `fzstd.decompress(...)`, `ZSTDDecoder`, `ZstdCodec` oder `zstddec.decompress(...)`.
+dann fehlt ein lokaler Zstandard-Decoder im Vendor-Ordner oder er stellt nicht `globalThis.fzstd.decompress(...)` bereit. Baue `vendor/zstd.js` mit `npm run build:vendor:zstd` neu.
 
 ### Test mit `IT-Recht.apkg`
 
