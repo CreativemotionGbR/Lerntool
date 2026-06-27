@@ -260,3 +260,33 @@ Führe die Tests manuell im Browser aus, indem du `index.html` öffnest. Für ei
 | Fallback-Platzhalter | `collection.anki2` enthält nur Update-Hinweis | Platzhalter wird nicht importiert |
 | Cloze einfach | `{{c1::Begriff}}` | Frage mit Lücke und Antwort mit Begriff |
 | Scheduler nach Import | importierte Karte richtig | `interval_minutes` wird 1, `due_at = jetzt + 1 Minute` |
+
+## Anki .apkg Import
+
+Die App kann Anki `.apkg` Dateien importieren.
+
+Für den lokalen Import werden Vendor-Dateien benötigt:
+
+- `vendor/jszip.min.js`
+- `vendor/sql-wasm.js`
+- `vendor/sql-wasm.wasm`
+- `vendor/zstd.js`
+
+Neue Anki-Dateien enthalten oft `collection.anki21b`. Diese Datei ist häufig Zstandard-komprimiert. Dafür wird lokal `vendor/zstd.js` benötigt.
+
+Der Import nutzt keine externen APIs und keine CDN-Dateien.
+
+### Test-Fixture
+
+Im Repository liegt:
+
+`fixtures/anki/IT-Recht.apkg`
+
+Zum Prüfen:
+
+```bash
+npm run build:vendor:zstd
+node scripts/inspect-apkg.mjs
+```
+
+Danach `index.html` öffnen und die Datei über `Import / Export` importieren.

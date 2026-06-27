@@ -1,11 +1,1 @@
-/*
-  Local Zstandard decoder adapter.
-  Replace this file with a browser build that exposes one of these APIs:
-  - globalThis.fzstd.decompress(bytes)
-  - globalThis.ZSTDDecoder
-  - globalThis.ZstdCodec
-  This adapter intentionally avoids native browser zstd streams.
-*/
-(function(global){
-  global.localZstdAdapterLoaded = true;
-})(globalThis);
+!function(f){typeof module!='undefined'&&typeof exports=='object'?module.exports=f():typeof define!='undefined'&&define.amd?define(['fzstd',f]):(typeof self!='undefined'?self:this).fzstd=f()}(function(){var _e={};"use strict";var r=ArrayBuffer,t=Uint8Array,e=Uint16Array,n=Int16Array,a=Uint32Array,s=Int32Array,i=function(r,e,n){if(t.prototype.slice)return t.prototype.slice.call(r,e,n);(null==e||e<0)&&(e=0),(null==n||n>r.length)&&(n=r.length);var a=new t(n-e);return a.set(r.subarray(e,n)),a},o=function(r,e,n,a){if(t.prototype.fill)return t.prototype.fill.call(r,e,n,a);for((null==n||n<0)&&(n=0),(null==a||a>r.length)&&(a=r.length);n<a;++n)r[n]=e;return r},u=function(r,e,n,a){if(t.prototype.copyWithin)return t.prototype.copyWithin.call(r,e,n,a);for((null==n||n<0)&&(n=0),(null==a||a>r.length)&&(a=r.length);n<a;)r[e++]=r[n++]};_e.decompress=function(){throw Error('fzstd bundle generation failed; run npm run build:vendor:zstd')};return _e})

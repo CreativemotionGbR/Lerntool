@@ -90,3 +90,17 @@ Failure tests:
 - Failed imports must not change local data.
 - Do not use DecompressionStream("zstd") for Anki imports.
 - No external APIs.
+
+## Anki import rules
+
+- File selection must not import or analyze automatically.
+- Import starts only after clicking "Karten importieren".
+- Prefer collection.anki21b over collection.anki2.
+- Never import fallback placeholder cards.
+- If collection.anki21b is zstd-compressed, use local fzstd from vendor/zstd.js.
+- Do not use DecompressionStream("zstd").
+- Support old and new Anki schemas.
+- German field names Vorderseite/Rückseite map to question/answer.
+- Imported cards must start as due immediately.
+- Existing scheduling logic must not be changed.
+- Failed imports must not change local data.
