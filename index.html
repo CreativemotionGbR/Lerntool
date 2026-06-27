@@ -3,109 +3,159 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lokales Lerntool</title>
+  <title>Lokales Lern-Tool</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="app-header">
-    <div>
-      <p class="eyebrow">Browser-Lernanwendung</p>
-      <h1>Lokales Lerntool</h1>
-      <p>Erstelle Stapel und Lernkarten, wiederhole sie lokal und sichere deine Daten optional in GitHub.</p>
+  <header class="topbar">
+    <div class="brand">
+      <strong>Lokales Lern-Tool</strong>
+      <span>reduziertes Anki-MVP</span>
     </div>
-    <div class="status-card">
-      <span id="storageStatus">Lokaler Speicher aktiv</span>
-      <strong id="cardCount">0 Karten</strong>
-    </div>
+    <nav id="mainNavigation" class="main-nav" aria-label="Hauptnavigation"></nav>
   </header>
 
-  <main class="layout">
-    <section class="panel">
-      <h2>Neue Lernkarte</h2>
-      <form id="cardForm" class="stacked-form">
-        <label>
-          Stapel
-          <input id="deckInput" type="text" placeholder="z. B. Biologie" required>
-        </label>
-        <label>
-          Vorderseite / Frage
-          <textarea id="frontInput" rows="3" required></textarea>
-        </label>
-        <label>
-          Rückseite / Antwort
-          <textarea id="backInput" rows="3" required></textarea>
-        </label>
-        <button type="submit">Karte speichern</button>
-      </form>
-    </section>
+  <main class="app-shell">
+    <section id="messageArea" class="message-area" aria-live="polite"></section>
 
-    <section class="panel review-panel">
-      <div class="section-title">
-        <h2>Wiederholen</h2>
-        <select id="deckFilter" aria-label="Stapel auswählen"></select>
-      </div>
-      <article id="reviewCard" class="flashcard empty">
-        <p>Lege zuerst eine Karte an.</p>
-      </article>
-      <div class="review-actions">
-        <button id="showAnswerButton" type="button">Antwort zeigen</button>
-        <button id="knownButton" type="button">Gewusst</button>
-        <button id="unknownButton" type="button">Nicht gewusst</button>
-      </div>
-    </section>
-
-    <section class="panel wide">
-      <div class="section-title">
-        <h2>Alle Karten</h2>
-        <button id="exportButton" type="button" class="secondary">JSON exportieren</button>
-      </div>
-      <div id="cardList" class="card-list"></div>
-    </section>
-
-    <section class="panel wide sync-panel">
-      <div class="section-title">
+    <section id="deckOverviewView" class="view" data-view="deck-overview">
+      <div class="view-header">
         <div>
-          <h2>GitHub-Synchronisierung</h2>
-          <p class="muted">Optionaler manueller Backup-Speicher über die GitHub REST API.</p>
+          <h1>Stapelübersicht</h1>
+          <p>Alle Lernstapel mit neuen, fälligen und gelernten Karten.</p>
         </div>
-        <span class="badge">Kein Auto-Sync</span>
+      </div>
+      <div id="deckOverviewList" class="deck-grid"></div>
+    </section>
+
+    <section id="addView" class="view" data-view="add">
+      <div class="view-header">
+        <div>
+          <h1>Hinzufügen</h1>
+          <p>Erstelle einen neuen Stapel oder füge eine Karte hinzu.</p>
+        </div>
       </div>
 
-      <form id="githubSettingsForm" class="sync-grid">
-        <label>
-          Repository-Besitzer
-          <input id="githubOwner" type="text" autocomplete="off" placeholder="octocat">
-        </label>
-        <label>
-          Repository-Name
-          <input id="githubRepo" type="text" autocomplete="off" placeholder="lern-backup">
-        </label>
-        <label>
-          Branch
-          <input id="githubBranch" type="text" autocomplete="off" value="main">
-        </label>
-        <label>
-          Dateipfad
-          <input id="githubPath" type="text" autocomplete="off" value="learning-tool-data/data.json">
-        </label>
-        <label class="full-width">
-          Personal Access Token
-          <input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_...">
-        </label>
-        <label class="checkbox full-width">
-          <input id="persistToken" type="checkbox">
-          Token dauerhaft lokal speichern
-        </label>
-        <p id="tokenWarning" class="warning hidden">Achtung: Der Token wird lokal im Browser gespeichert. Nutze diese Option nur auf deinem eigenen PC.</p>
-        <button type="submit">Einstellungen speichern</button>
-      </form>
+      <div class="two-column">
+        <article class="panel">
+          <h2>Stapel hinzufügen</h2>
+          <form id="deckForm" class="form-stack" novalidate>
+            <label for="deckNameInput">Stapelname</label>
+            <input id="deckNameInput" type="text" autocomplete="off" placeholder="z. B. Datenschutz">
+            <button type="submit">Stapel erstellen</button>
+          </form>
+        </article>
 
-      <div class="sync-actions">
-        <button id="uploadGithubButton" type="button">Lokale Daten zu GitHub hochladen</button>
-        <button id="downloadGithubButton" type="button" class="secondary">Daten von GitHub herunterladen</button>
-        <button id="replaceLocalButton" type="button" class="danger">Lokale Daten mit GitHub-Daten ersetzen</button>
+        <article class="panel">
+          <h2>Karte hinzufügen</h2>
+          <form id="quickCardForm" class="form-stack" novalidate>
+            <label for="quickCardDeckSelect">Stapel</label>
+            <select id="quickCardDeckSelect"></select>
+            <label for="quickQuestionInput">Frage</label>
+            <textarea id="quickQuestionInput" rows="5"></textarea>
+            <label for="quickAnswerInput">Antwort</label>
+            <textarea id="quickAnswerInput" rows="5"></textarea>
+            <button type="submit">Karte erstellen</button>
+          </form>
+        </article>
       </div>
-      <pre id="syncLog" class="sync-log" aria-live="polite">Bereit.</pre>
+    </section>
+
+    <section id="cardManagementView" class="view" data-view="card-management">
+      <div class="view-header">
+        <div>
+          <h1>Kartenverwaltung</h1>
+          <p>Wähle einen Stapel, bearbeite vorhandene Karten oder erstelle neue Karten.</p>
+        </div>
+        <label class="compact-label">Stapel
+          <select id="managementDeckSelect"></select>
+        </label>
+      </div>
+
+      <article class="panel">
+        <h2 id="cardEditorTitle">Karte erstellen</h2>
+        <form id="cardEditorForm" class="form-stack" novalidate>
+          <input id="editingCardId" type="hidden">
+          <label for="cardQuestionInput">Frage</label>
+          <textarea id="cardQuestionInput" rows="4"></textarea>
+          <label for="cardAnswerInput">Antwort</label>
+          <textarea id="cardAnswerInput" rows="4"></textarea>
+          <div class="button-row">
+            <button type="submit">Karte speichern</button>
+            <button id="cancelCardEditButton" type="button" class="secondary hidden">Bearbeitung abbrechen</button>
+          </div>
+        </form>
+      </article>
+
+      <div id="cardManagementList" class="card-list"></div>
+    </section>
+
+    <section id="learningView" class="view" data-view="learning">
+      <div class="view-header">
+        <div>
+          <h1>Lernen</h1>
+          <p>Frage ansehen, Antwort anzeigen und mit Richtig oder Falsch bewerten.</p>
+        </div>
+        <label class="compact-label">Stapel
+          <select id="learningDeckSelect"></select>
+        </label>
+      </div>
+
+      <article class="learning-card" id="learningCard">
+        <p class="muted">Wähle einen Stapel und starte das Lernen.</p>
+      </article>
+
+      <div class="learning-actions">
+        <button id="showAnswerButton" type="button">Antwort anzeigen</button>
+        <button id="correctButton" type="button" class="success hidden">Richtig</button>
+        <button id="incorrectButton" type="button" class="danger hidden">Falsch</button>
+      </div>
+      <p id="learningStatus" class="status-text"></p>
+    </section>
+
+    <section id="statsView" class="view" data-view="stats">
+      <div class="view-header">
+        <div>
+          <h1>Statistiken</h1>
+          <p>Ein einfacher Überblick über deinen lokalen Lernstand.</p>
+        </div>
+      </div>
+      <dl id="statsGrid" class="stats-grid"></dl>
+    </section>
+
+    <section id="importExportView" class="view" data-view="import-export">
+      <div class="view-header">
+        <div>
+          <h1>Import / Export</h1>
+          <p>Exportiere ein lokales Backup oder importiere eine vorhandene JSON-Datei.</p>
+        </div>
+      </div>
+
+      <div class="two-column">
+        <article class="panel">
+          <h2>JSON Export</h2>
+          <p>Exportiert alle Stapel, Karten und Review-Historien.</p>
+          <button id="exportJsonButton" type="button">JSON exportieren</button>
+        </article>
+
+        <article class="panel">
+          <h2>JSON Import</h2>
+          <form id="importJsonForm" class="form-stack" novalidate>
+            <input id="importJsonFile" type="file" accept="application/json,.json">
+            <button type="submit" class="secondary">JSON importieren</button>
+          </form>
+        </article>
+      </div>
+
+      <article class="panel notice-panel">
+        <h2>.apkg Import</h2>
+        <p>.apkg Import ist vorbereitet, aber im MVP noch nicht aktiv. Anki .apkg-Dateien sind ZIP-Dateien mit einer SQLite-Datenbank und benötigen JSZip und sql.js.</p>
+      </article>
+
+      <article class="panel notice-panel disabled-feature">
+        <h2>Intelligenter Modus: geplant</h2>
+        <p>Später soll die App anhand deiner Antworten, Fehlerhäufigkeit und Lernhistorie selbst entscheiden, wann Karten optimal wiederholt werden.</p>
+      </article>
     </section>
   </main>
 
