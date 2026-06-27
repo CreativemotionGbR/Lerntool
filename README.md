@@ -173,7 +173,7 @@ Die Oberfläche enthält einen funktionierenden Textkarten-Import für `.apkg` D
 
 ## Anki .apkg Import
 
-Die App kann Anki `.apkg` Dateien importieren, wenn die benötigten Vendor-Dateien lokal vorhanden sind. Der Import läuft vollständig im Browser: Die Datei wird zuerst analysiert, danach erscheint eine Vorschau, und erst nach Klick auf `Karten importieren` werden neue lokale Stapel und Karten hinzugefügt. Bestehende lokale Daten werden dabei nicht gelöscht.
+Die App kann Anki `.apkg` Dateien importieren. Der Import läuft vollständig im Browser: Die Datei wird bei der Auswahl nur gemerkt, und erst nach Klick auf `Karten importieren` wird sie gelesen, analysiert und importiert. Bestehende lokale Daten werden dabei nicht gelöscht.
 
 Unterstützt im MVP:
 
@@ -194,20 +194,19 @@ Technisch benötigt:
 - `vendor/jszip.min.js`
 - `vendor/sql-wasm.js`
 - `vendor/sql-wasm.wasm`
-- ggf. `vendor/zstddec.js` für neue Anki-Dateien mit `collection.anki21b`
+- `vendor/zstddec.js` für neue Anki-Dateien mit Zstandard-komprimierter `collection.anki21b`
 
 Die Daten bleiben lokal im Browser. Es gibt keine CDN-Abhängigkeit, keine externen APIs und keine Cloud-Synchronisierung. Wenn `collection.anki21b` vorhanden, aber ohne lokalen Zstandard-Decoder nicht lesbar ist, zeigt die App eine klare Fehlermeldung und importiert nicht blind eine mögliche `collection.anki2`-Fallback-/Platzhalterdatenbank.
 
 ### Test mit `IT-Recht.apkg`
 
-1. Lege die benötigten Vendor-Dateien im Ordner `vendor/` ab.
+1. Prüfe, dass der Ordner `vendor/` mit den lokalen Import-Dateien vorhanden ist.
 2. Öffne `index.html` direkt im Browser.
 3. Öffne `Import / Export`.
 4. Wähle `IT-Recht.apkg` aus.
-5. Klicke auf `Anki-Datei analysieren`.
-6. Prüfe Datenbanktyp, erkannte Decks, Notizen, Karten, importierbare Karten und Warnungen.
-7. Klicke nur bei plausibler Vorschau auf `Karten importieren`.
-8. Starte danach den importierten Stapel in der Lernansicht. Importierte Karten sind sofort fällig und nutzen die bestehende Richtig/Falsch-Logik.
+5. Klicke auf `Karten importieren`.
+6. Prüfe die Import-Zusammenfassung mit Datenbanktyp, gefundenen Karten, importierten Karten, Duplikaten und Warnungen.
+7. Starte danach den importierten Stapel in der Lernansicht. Importierte Karten sind sofort fällig und nutzen die bestehende Richtig/Falsch-Logik.
 
 Bekannte Grenzen des Imports:
 

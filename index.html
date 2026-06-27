@@ -149,16 +149,14 @@
 
       <article class="panel notice-panel apkg-panel">
         <h2>Anki .apkg Import</h2>
-        <p>Analysiere zuerst die Datei. Erst nach der Vorschau werden unterstützte Karten importiert.</p>
+        <p>Wähle eine Datei aus und starte danach den Import. Die Zusammenfassung erscheint nach dem Import.</p>
         <form id="apkgImportForm" class="form-stack" novalidate>
           <label for="apkgFileInput">Datei auswählen</label>
           <input id="apkgFileInput" type="file" accept=".apkg,application/zip,application/octet-stream">
-          <div class="button-row">
-            <button id="analyzeApkgButton" type="submit">Anki-Datei analysieren</button>
-            <button id="importApkgButton" type="button" class="secondary" disabled>Karten importieren</button>
-          </div>
+          <button id="importApkgButton" type="button" class="secondary" disabled>Karten importieren</button>
         </form>
-        <div id="apkgStatus" class="status-box">Keine .apkg Datei analysiert.</div>
+        <p id="selectedApkgFileName" class="status-text">Ausgewählte Datei: keine</p>
+        <div id="apkgStatus" class="status-box">Noch keine Datei ausgewählt.</div>
         <div id="apkgPreview" class="import-summary"></div>
       </article>
 

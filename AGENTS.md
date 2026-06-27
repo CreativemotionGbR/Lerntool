@@ -77,11 +77,15 @@ Failure tests:
 ## Anki import rules
 
 - Do not overwrite local data during .apkg import.
-- Analyze before importing.
-- Show a preview before saving imported cards.
+- File selection must not import or analyze automatically.
+- Import starts only after clicking "Karten importieren".
 - Prefer collection.anki21b over collection.anki2 if both exist.
 - Do not import placeholder cards from fallback databases.
 - Skip unsupported card types instead of creating broken cards.
 - Imported cards start with interval_minutes = 0 and due_at = now.
 - Existing scheduling logic must not be changed.
+- If collection.anki21b is zstd-compressed and no decoder is available, fail clearly.
+- Support old and new Anki schemas.
+- German field names Vorderseite/Rückseite map to question/answer.
+- Failed imports must not change local data.
 - No external APIs.
